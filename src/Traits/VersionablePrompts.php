@@ -407,10 +407,32 @@ trait VersionablePrompts
         $blade = app('blade.compiler');
         $compiled = $blade->compileString(File::get($path));
         
-        ob_start();
-        extract($data, EXTR_SKIP);
-        eval('?>' . $compiled);
-        $rendered = ob_get_clean();
+        // Suppress PHP errors that could break Livewire JSON responses
+        $originalErrorReporting = error_reporting();
+        error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+        
+        try {
+            ob_start();
+            extract($data, EXTR_SKIP);
+            eval('?>' . $compiled);
+            $rendered = ob_get_clean();
+            
+            // Debug logging if enabled
+            if (config('app.debug', false)) {
+                \Log::debug('Blade prompt rendered', [
+                    'path' => $path,
+                    'data_keys' => array_keys($data),
+                    'rendered_length' => strlen($rendered)
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // Restore error reporting before throwing
+            error_reporting($originalErrorReporting);
+            throw $e;
+        }
+        
+        // Restore original error reporting
+        error_reporting($originalErrorReporting);
 
         return $rendered ?: '';
     }
